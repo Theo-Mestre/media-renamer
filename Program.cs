@@ -1,12 +1,24 @@
+using MediaRenamer.Core.Services;
 using MediaRenamer.Theme;
 using MediaRenamer.UI;
 using MediaRenamer.UI.Screens;
 using Spectre.Console;
 
 var themes = ThemeManager.LoadAllThemes();
-var session = new AppSession(themes.First());
+var savedState = SessionStorage.Load();
 
-// Handle CLI argument launch: MediaRenamer.exe "X:\Fan Art"
+var initialTheme = themes.FirstOrDefault(t =>
+    string.Equals(t.Name, savedState.LastThemeName, StringComparison.OrdinalIgnoreCase))
+    ?? themes.First();
+
+var session = new AppSession(initialTheme);
+
+if (savedState.LastPipelineConfig != null)
+{
+    session.PipelineConfig.CopyFrom(savedState.LastPipelineConfig);
+}
+
+// 1. CLI argument takes priority; otherwise restore last saved workspace from session.json
 if (args.Length > 0 && !string.IsNullOrWhiteSpace(args[0]))
 {
     string candidatePath = args[0].Trim().Trim('"');
@@ -30,6 +42,11 @@ if (args.Length > 0 && !string.IsNullOrWhiteSpace(args[0]))
         }
     }
 }
+else if (!string.IsNullOrWhiteSpace(savedState.LastRootDirectory) && Directory.Exists(savedState.LastRootDirectory))
+{
+    session.RootDirectory = Path.GetFullPath(savedState.LastRootDirectory);
+    session.RescanWorkspace();
+}
 
 WindowStyler.ApplyWindowTheme(session.CurrentTheme, " ");
 
@@ -51,32 +68,29 @@ while (true)
     ThemeRenderer.RenderDashboard(session);
 
     var theme = session.CurrentTheme;
-    var menuChoices = new List<int> { 1, 2, 3, 4 };
+    var menuOptions = new List<MenuOption<int>>
+    {
+        new(1, "Set Target Folder & Scan", '1'),
+        new(2, "Select Files (Multi-Select / Audit)", '2'),
+        new(3, "Configure Rename Stack & Auto-Numbering", '3'),
+        new(4, "Preview & Apply Rename", '4')
+    };
+
+    if (session.SelectedFiles.Count > 0)
+        menuOptions.Add(new(5, $"[{theme.MutedHex}]Clear Selection ({session.SelectedFiles.Count})[/]", '5'));
+
     if (session.Engine.CanUndo)
-        menuChoices.Add(5);
-    menuChoices.AddRange([6, 7]);
+        menuOptions.Add(new(6, $"[{theme.WarningHex}]Undo Last Rename ({session.Engine.LastBatchCount} files)[/]", '6'));
+
+    menuOptions.Add(new(7, "Switch Visual Theme", '7'));
+    menuOptions.Add(new(8, "Exit", '8'));
 
     isOnMainMenu = true;
-    var choice = AnsiConsole.Prompt(
-        new SelectionPrompt<int>()
-            .Title($"  [{theme.CategoryLabelHex}]Actions[/]")
-            .PageSize(WindowStyler.GetResponsivePageSize(reservedHeaderRows: 14, minRows: 5))
-            .HighlightStyle(new Style(
-                foreground: theme.ToColor(theme.BackgroundHex),
-                background: theme.ToColor(theme.PrimaryHex),
-                decoration: Decoration.Bold))
-            .UseConverter(id => id switch
-            {
-                1 => "  Set Target Folder & Scan",
-                2 => "  Select Files (Multi-Select)",
-                3 => "  Configure Rename Rules & Auto-Numbering",
-                4 => "  Preview & Apply Rename",
-                5 => $"  [{theme.WarningHex}]Undo Last Rename ({session.Engine.LastBatchCount} files)[/]",
-                6 => "  Switch Visual Theme",
-                7 => "  Exit",
-                _ => string.Empty
-            })
-            .AddChoices(menuChoices));
+    int choice = InteractiveMenu.Prompt(
+        $"  [{theme.CategoryLabelHex}]Actions[/]",
+        menuOptions,
+        theme,
+        pageSize: WindowStyler.GetResponsivePageSize(reservedHeaderRows: 14, minRows: 5));
 
     isOnMainMenu = false;
     AnsiConsole.Clear();
@@ -93,6 +107,7 @@ while (true)
             {
                 session.RootDirectory = Path.GetFullPath(inputPath);
                 session.RescanWorkspace();
+                session.SaveState();
                 AnsiConsole.MarkupLine($"  [{theme.SuccessHex}]✓ Scanned {session.AllFiles.Count} media files across all subfolders.[/]");
             }
             else
@@ -117,6 +132,10 @@ while (true)
             break;
 
         case 5:
+            session.ClearSelection();
+            break;
+
+        case 6:
             AnsiConsole.WriteLine();
             if (AnsiConsole.Confirm($"  [{theme.WarningHex}]Revert the last batch of {session.Engine.LastBatchCount} renamed file(s)?[/]"))
             {
@@ -131,22 +150,25 @@ while (true)
             ThemeRenderer.Pause(theme);
             break;
 
-        case 6:
+        case 7:
             AnsiConsole.WriteLine();
             themes = ThemeManager.LoadAllThemes();
-            session.CurrentTheme = AnsiConsole.Prompt(
-                new SelectionPrompt<AppTheme>()
-                    .Title($"  [{theme.CategoryLabelHex}]Themes[/]")
-                    .HighlightStyle(new Style(
-                        foreground: theme.ToColor(theme.BackgroundHex),
-                        background: theme.ToColor(theme.PrimaryHex)))
-                    .UseConverter(t => $"  {t.Name} [{t.MutedHex}]({t.BackgroundHex})[/]")
-                    .AddChoices(themes));
+            var themeChoices = themes
+                .Select((t, i) => new MenuOption<int>(i, $"{t.Name} [{t.MutedHex}]({t.BackgroundHex})[/]", i < 9 ? (char)('1' + i) : null))
+                .Append(new MenuOption<int>(-1, "Cancel (Esc)", '0', IsBackOption: true))
+                .ToList();
 
-            WindowStyler.ApplyWindowTheme(session.CurrentTheme, " ");
+            int themeIdx = InteractiveMenu.Prompt($"  [{theme.CategoryLabelHex}]Themes[/]", themeChoices, theme, backValue: -1, allowEscape: true);
+            if (themeIdx >= 0)
+            {
+                session.CurrentTheme = themes[themeIdx];
+                session.SaveState();
+                WindowStyler.ApplyWindowTheme(session.CurrentTheme, " ");
+            }
             break;
 
-        case 7:
+        case 8:
+            session.SaveState();
             return;
     }
 }

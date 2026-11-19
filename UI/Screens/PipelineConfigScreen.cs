@@ -22,88 +22,91 @@ public static class PipelineConfigScreen
                 HorizontalAlignment.Center));
             AnsiConsole.WriteLine();
 
-            RenderOperationStackSummary(config, theme);
+            RenderOperationStackAndLivePreview(session);
 
             string scopeDisplay = config.Scope == CountScope.NameAndArtist ? "Name + Artist" : "Name Only";
 
-            var choice = AnsiConsole.Prompt(
-                new SelectionPrompt<int>()
-                    .Title($"  [{theme.CategoryLabelHex}]Stack & Numbering Controls[/]")
-                    .PageSize(WindowStyler.GetResponsivePageSize(reservedHeaderRows: 12, minRows: 6))
-                    .HighlightStyle(new Style(
-                        foreground: theme.ToColor(theme.BackgroundHex),
-                        background: theme.ToColor(theme.PrimaryHex),
-                        decoration: Decoration.Bold))
-                    .UseConverter(id => id switch
-                    {
-                        1 => $"  [{theme.SuccessHex}]+ Add Operation[/] [{theme.MutedHex}](Replace, Regex, Split, Identity, Affix, Trim, Case)[/]",
-                        2 => $"  [{theme.PrimaryHex}]✎ Edit / Reorder / Remove Operations ({config.Operations.Count})[/]",
-                        3 => $"  [{theme.HeaderAccentHex}]👁 Preview Steps (Original | After Step | Final Name)[/]",
-                        4 => $"  [{theme.HeaderAccentHex}]Presets (Load / Save / Delete)[/]",
-                        5 => $"  Smart Auto-Count      [{theme.MutedHex}]→[/] {(config.AutoCount ? $"[{theme.SuccessHex}]✓ ENABLED[/]" : $"[{theme.MutedHex}]DISABLED[/]")}",
-                        6 => $"  Compact Sequence Gaps [{theme.MutedHex}]→[/] {(config.CompactGaps ? $"[{theme.WarningHex}]✓ ON (001, 003 → 001, 002)[/]" : $"[{theme.MutedHex}]OFF[/]")}",
-                        7 => $"  Auto-Count Scope      [{theme.MutedHex}]→[/] [{theme.PrimaryHex}]{Markup.Escape(scopeDisplay)}[/]",
-                        8 => $"  Linked Group Index    [{theme.MutedHex}]→[/] {(config.LinkedNumberOverride.HasValue ? $"[{theme.WarningHex}]{config.LinkedNumberOverride.Value}[/]" : $"[{theme.MutedHex}]Disabled[/]")}",
-                        9 => $"  [{theme.WarningHex}]Reset Stack to Default[/]",
-                        10 => $"  [{theme.SuccessHex}]✓ Done[/]",
-                        _ => string.Empty
-                    })
-                    .AddChoices(1, 2, 3, 4, 5, 6, 7, 8, 9, 10));
+            var options = new List<MenuOption<int>>
+            {
+                new(1, $"[{theme.SuccessHex}]+ Add Operation[/] [{theme.MutedHex}](Replace, Regex, Split, Identity, Affix, Trim, Case)[/]", '1'),
+                new(2, $"[{theme.PrimaryHex}]✎ Edit / Reorder / Remove Operations ({config.Operations.Count})[/]", '2'),
+                new(3, $"[{theme.HeaderAccentHex}]👁 Full Step-by-Step Inspector (Original | After Step | Final)[/]", '3'),
+                new(4, $"[{theme.HeaderAccentHex}]Presets (Load / Save / Delete)[/]", '4'),
+                new(5, $"Smart Auto-Count      [{theme.MutedHex}]→[/] {(config.AutoCount ? $"[{theme.SuccessHex}]✓ ENABLED[/]" : $"[{theme.MutedHex}]DISABLED[/]")}", '5'),
+                new(6, $"Compact Sequence Gaps [{theme.MutedHex}]→[/] {(config.CompactGaps ? $"[{theme.WarningHex}]✓ ON (001, 003 → 001, 002)[/]" : $"[{theme.MutedHex}]OFF[/]")}", '6'),
+                new(7, $"Auto-Count Scope      [{theme.MutedHex}]→[/] [{theme.PrimaryHex}]{Markup.Escape(scopeDisplay)}[/]", '7'),
+                new(8, $"Linked Group Index    [{theme.MutedHex}]→[/] {(config.LinkedNumberOverride.HasValue ? $"[{theme.WarningHex}]{config.LinkedNumberOverride.Value}[/]" : $"[{theme.MutedHex}]Disabled[/]")}", '8'),
+                new(9, $"[{theme.WarningHex}]Reset Stack to Default[/]", '9'),
+                new(0, $"[{theme.SuccessHex}]✓ Done (Esc)[/]", '0', IsBackOption: true)
+            };
+
+            int choice = InteractiveMenu.Prompt(
+                $"  [{theme.CategoryLabelHex}]Stack & Numbering Controls[/]",
+                options,
+                theme,
+                backValue: 0,
+                allowEscape: true,
+                pageSize: 10);
 
             switch (choice)
             {
                 case 1:
                     AddOperationFlow(config, theme);
+                    session.SaveState();
                     break;
-
                 case 2:
                     ManageExistingOperations(config, theme);
+                    session.SaveState();
                     break;
-
                 case 3:
                     ShowStepByStepPreview(session);
                     break;
-
                 case 4:
                     ManagePresets(config, theme);
+                    session.SaveState();
                     break;
-
                 case 5:
                     config.AutoCount = !config.AutoCount;
+                    session.SaveState();
                     break;
-
                 case 6:
                     config.CompactGaps = !config.CompactGaps;
                     if (config.CompactGaps) config.LinkedNumberOverride = null;
+                    session.SaveState();
                     break;
-
                 case 7:
                     config.Scope = config.Scope == CountScope.NameAndArtist
                         ? CountScope.NameOnly
                         : CountScope.NameAndArtist;
+                    session.SaveState();
                     break;
-
                 case 8:
+                    AnsiConsole.Clear();
+                    AnsiConsole.WriteLine();
                     string raw = AnsiConsole.Prompt(
                         new TextPrompt<string>($"  [{theme.CategoryLabelHex}]New Group Number[/] [{theme.MutedHex}](blank to disable) >[/]")
                             .AllowEmpty());
                     config.LinkedNumberOverride = int.TryParse(raw, out int parsedNum) && parsedNum >= 0 ? parsedNum : null;
                     if (config.LinkedNumberOverride.HasValue) config.CompactGaps = false;
+                    session.SaveState();
                     break;
-
                 case 9:
                     config.Reset();
+                    session.SaveState();
                     break;
-
-                case 10:
+                case 0:
                     return;
             }
         }
     }
 
-    private static void RenderOperationStackSummary(RenamePipelineConfig config, AppTheme theme)
+    private static void RenderOperationStackAndLivePreview(AppSession session)
     {
-        var table = new Table()
+        var config = session.PipelineConfig;
+        var theme = session.CurrentTheme;
+
+        // 1. Operation Stack Table
+        var stackTable = new Table()
             .Border(TableBorder.Rounded)
             .BorderColor(theme.ToColor(theme.BorderHex))
             .AddColumn($"[{theme.MutedHex}]#[/]")
@@ -113,7 +116,7 @@ public static class PipelineConfigScreen
 
         if (config.Operations.Count == 0)
         {
-            table.AddRow("-", $"[{theme.MutedHex}]No operations in stack[/]", $"[{theme.MutedHex}]Select '+ Add Operation' below[/]", "-");
+            stackTable.AddRow("-", $"[{theme.MutedHex}]No operations in stack[/]", $"[{theme.MutedHex}]Press [1] to add an operation[/]", "-");
         }
         else
         {
@@ -127,7 +130,7 @@ public static class PipelineConfigScreen
                 string titleColor = op.IsEnabled ? theme.PrimaryHex : theme.MutedHex;
                 string summaryColor = op.IsEnabled ? theme.TextHex : theme.MutedHex;
 
-                table.AddRow(
+                stackTable.AddRow(
                     $"[{theme.MutedHex}]{i + 1}[/]",
                     $"[{titleColor}]{Markup.Escape(op.DisplayTitle)}[/]",
                     $"[{summaryColor}]{Markup.Escape(op.Summary)}[/]",
@@ -135,30 +138,73 @@ public static class PipelineConfigScreen
             }
         }
 
-        AnsiConsole.Write(new Padder(table, new Padding(2, 0, 2, 1)));
+        AnsiConsole.Write(new Padder(stackTable, new Padding(2, 0, 2, 0)));
+
+        // 2. Live Inline Sample Preview (Top 3 selected or workspace files)
+        var sampleSource = session.SelectedFiles.Count > 0
+            ? session.SelectedFiles.Take(3).ToList()
+            : session.AllFiles.Take(3).ToList();
+
+        if (sampleSource.Count > 0)
+        {
+            var samplePreviews = session.Engine.BuildPreview(session.AllFiles, sampleSource, config);
+            var previewTable = new Table()
+                .NoBorder()
+                .AddColumn(new TableColumn($"[{theme.MutedHex}]Live Sample (Before)[/]"))
+                .AddColumn(new TableColumn(string.Empty).Width(3))
+                .AddColumn(new TableColumn($"[{theme.HeaderAccentHex}]Live Sample (After)[/]"));
+
+            foreach (var p in samplePreviews.Take(3))
+            {
+                string afterColor = p.HasCollision ? theme.ErrorHex : p.HasChanged ? theme.SuccessHex : theme.MutedHex;
+                previewTable.AddRow(
+                    $"[{theme.MutedHex}]{Markup.Escape(p.Source.FileName)}[/]",
+                    $"[{theme.MutedHex}]→[/]",
+                    $"[{afterColor}]{Markup.Escape(p.ProposedFileName)}[/]");
+            }
+
+            var livePanel = new Panel(previewTable)
+            {
+                Header = new PanelHeader($" [{theme.MutedHex}]Live Sample Preview[/] ", Justify.Left),
+                Border = BoxBorder.Rounded,
+                BorderStyle = new Style(foreground: theme.ToColor(theme.BorderHex)),
+                Padding = new Padding(1, 0, 1, 0)
+            };
+
+            AnsiConsole.Write(new Padder(livePanel, new Padding(2, 0, 2, 1)));
+        }
+        else
+        {
+            AnsiConsole.WriteLine();
+        }
     }
 
     private static void AddOperationFlow(RenamePipelineConfig config, AppTheme theme)
     {
-        int typeChoice = AnsiConsole.Prompt(
-            new SelectionPrompt<int>()
-                .Title($"  [{theme.CategoryLabelHex}]Choose Operation Type to Append[/]")
-                .HighlightStyle(new Style(
-                    foreground: theme.ToColor(theme.BackgroundHex),
-                    background: theme.ToColor(theme.PrimaryHex)))
-                .UseConverter(t => t switch
-                {
-                    1 => "  Replace String (supports Regex & Case-Sensitive)",
-                    2 => "  Split Name / Artist (insert ' - ' after N words or before Artist)",
-                    3 => "  Set Base Identity (replace entire Name - Artist stem)",
-                    4 => "  Add Prefix / Suffix",
-                    5 => "  Trim Characters (remove N chars from start or end)",
-                    6 => "  Case Conversion (TitleCase, PascalCase, CamelCase)",
-                    7 => "  Strip Legacy Numbers (remove old trailing ' 00', '_01')",
-                    8 => "  Cancel",
-                    _ => string.Empty
-                })
-                .AddChoices(1, 2, 3, 4, 5, 6, 7, 8));
+        AnsiConsole.Clear();
+        AnsiConsole.WriteLine();
+
+        var typeOptions = new List<MenuOption<int>>
+        {
+            new(1, "Replace String (supports Regex & Case-Sensitive)", '1'),
+            new(2, "Split Name / Artist (insert ' - ' after N words or before Artist)", '2'),
+            new(3, "Set Base Identity (replace entire Name - Artist stem)", '3'),
+            new(4, "Add Prefix / Suffix", '4'),
+            new(5, "Trim Characters (remove N chars from start or end)", '5'),
+            new(6, "Case Conversion (TitleCase, PascalCase, CamelCase)", '6'),
+            new(7, "Strip Legacy Numbers (remove old trailing ' 00', '_01')", '7'),
+            new(0, "Cancel (Esc)", '0', IsBackOption: true)
+        };
+
+        int typeChoice = InteractiveMenu.Prompt(
+            $"  [{theme.CategoryLabelHex}]Choose Operation Type to Append[/]",
+            typeOptions,
+            theme,
+            backValue: 0,
+            allowEscape: true);
+
+        AnsiConsole.Clear();
+        AnsiConsole.WriteLine();
 
         RenameOperation? created = typeChoice switch
         {
@@ -180,53 +226,60 @@ public static class PipelineConfigScreen
 
     private static void ManageExistingOperations(RenamePipelineConfig config, AppTheme theme)
     {
-        if (config.Operations.Count == 0)
-        {
-            AnsiConsole.MarkupLine($"  [{theme.WarningHex}]! Stack is empty.[/]");
-            ThemeRenderer.Pause(theme);
-            return;
-        }
+        if (config.Operations.Count == 0) return;
 
-        int index = AnsiConsole.Prompt(
-            new SelectionPrompt<int>()
-                .Title($"  [{theme.CategoryLabelHex}]Select Operation to Modify[/]")
-                .HighlightStyle(new Style(
-                    foreground: theme.ToColor(theme.BackgroundHex),
-                    background: theme.ToColor(theme.PrimaryHex)))
-                .UseConverter(idx =>
-                {
-                    if (idx == -1) return "  Back";
-                    var op = config.Operations[idx];
-                    string badge = op.IsEnabled ? $"[{theme.SuccessHex}]ON[/]" : $"[{theme.MutedHex}]OFF[/]";
-                    return $"  [{theme.MutedHex}]#{idx + 1}[/] [[{badge}]] [{theme.PrimaryHex}]{Markup.Escape(op.DisplayTitle)}[/] — {Markup.Escape(op.Summary)}";
-                })
-                .AddChoices(Enumerable.Range(0, config.Operations.Count).Append(-1)));
+        AnsiConsole.Clear();
+        AnsiConsole.WriteLine();
+
+        var opOptions = config.Operations
+            .Select((op, idx) =>
+            {
+                string badge = op.IsEnabled ? $"[{theme.SuccessHex}]ON[/]" : $"[{theme.MutedHex}]OFF[/]";
+                char? hotkey = idx < 9 ? (char)('1' + idx) : null;
+                return new MenuOption<int>(
+                    idx,
+                    $"[{theme.MutedHex}]#{idx + 1}[/] [[{badge}]] [{theme.PrimaryHex}]{Markup.Escape(op.DisplayTitle)}[/] — {Markup.Escape(op.Summary)}",
+                    hotkey);
+            })
+            .Append(new MenuOption<int>(-1, "Back (Esc)", '0', IsBackOption: true))
+            .ToList();
+
+        int index = InteractiveMenu.Prompt(
+            $"  [{theme.CategoryLabelHex}]Select Operation to Modify[/]",
+            opOptions,
+            theme,
+            backValue: -1,
+            allowEscape: true);
 
         if (index == -1) return;
 
         var selectedOp = config.Operations[index];
 
-        int action = AnsiConsole.Prompt(
-            new SelectionPrompt<int>()
-                .Title($"  [{theme.CategoryLabelHex}]Action for #{index + 1} ({Markup.Escape(selectedOp.DisplayTitle)})[/]")
-                .HighlightStyle(new Style(
-                    foreground: theme.ToColor(theme.BackgroundHex),
-                    background: theme.ToColor(theme.PrimaryHex)))
-                .UseConverter(a => a switch
-                {
-                    1 => "  ✎ Edit Parameters",
-                    2 => "  ▲ Move Up",
-                    3 => "  ▼ Move Down",
-                    4 => selectedOp.IsEnabled ? "  ○ Disable Step" : "  ● Enable Step",
-                    5 => $"  [{theme.ErrorHex}]✕ Remove Step[/]",
-                    6 => "  Back",
-                    _ => string.Empty
-                })
-                .AddChoices(1, 2, 3, 4, 5, 6));
+        AnsiConsole.Clear();
+        AnsiConsole.WriteLine();
+
+        var actionOptions = new List<MenuOption<int>>
+        {
+            new(1, "✎ Edit Parameters", '1'),
+            new(2, "▲ Move Up", '2'),
+            new(3, "▼ Move Down", '3'),
+            new(4, selectedOp.IsEnabled ? "○ Disable Step" : "● Enable Step", '4'),
+            new(5, $"[{theme.ErrorHex}]✕ Remove Step[/]", '5'),
+            new(0, "Back (Esc)", '0', IsBackOption: true)
+        };
+
+        int action = InteractiveMenu.Prompt(
+            $"  [{theme.CategoryLabelHex}]Action for #{index + 1} ({Markup.Escape(selectedOp.DisplayTitle)})[/]",
+            actionOptions,
+            theme,
+            backValue: 0,
+            allowEscape: true);
 
         switch (action)
         {
             case 1:
+                AnsiConsole.Clear();
+                AnsiConsole.WriteLine();
                 EditOperation(selectedOp, theme);
                 break;
             case 2 when index > 0:
@@ -262,7 +315,6 @@ public static class PipelineConfigScreen
 
         var previews = session.Engine.BuildPreview(session.AllFiles, sampleFiles, config);
         var enabledOps = config.Operations.Where(o => o.IsEnabled).ToList();
-
         int inspectedStepIndex = enabledOps.Count > 0 ? 0 : -1;
 
         while (true)
@@ -285,7 +337,7 @@ public static class PipelineConfigScreen
                 .AddColumn($"[{theme.HeaderAccentHex}]{inspectedHeader}[/]")
                 .AddColumn($"[{theme.PrimaryHex}]Final Name[/]");
 
-            int maxRows = WindowStyler.GetResponsivePageSize(reservedHeaderRows: 12, minRows: 5);
+            int maxRows = Math.Max(5, Console.WindowHeight - 16);
             foreach (var p in previews.Take(maxRows))
             {
                 string afterStepText = inspectedStepIndex >= 0 && inspectedStepIndex < p.StepHistory.Count
@@ -310,23 +362,21 @@ public static class PipelineConfigScreen
 
             AnsiConsole.Write(new Padder(table, new Padding(2, 0, 2, 1)));
 
-            if (enabledOps.Count <= 1)
-            {
-                ThemeRenderer.Pause(theme);
-                return;
-            }
+            var tabOptions = enabledOps
+                .Select((op, idx) => new MenuOption<int>(
+                    idx,
+                    $"Step #{idx + 1}: {Markup.Escape(op.DisplayTitle)} ({Markup.Escape(op.Summary)})",
+                    idx < 9 ? (char)('1' + idx) : null))
+                .Append(new MenuOption<int>(-1, "← Back to Stack Editor (Esc)", '0', IsBackOption: true))
+                .ToList();
 
-            var navChoices = Enumerable.Range(0, enabledOps.Count).Append(-1).ToList();
-            int picked = AnsiConsole.Prompt(
-                new SelectionPrompt<int>()
-                    .Title($"  [{theme.CategoryLabelHex}]Inspect Step Tab[/]")
-                    .HighlightStyle(new Style(
-                        foreground: theme.ToColor(theme.BackgroundHex),
-                        background: theme.ToColor(theme.PrimaryHex)))
-                    .UseConverter(idx => idx == -1
-                        ? "  ← Back to Stack Editor"
-                        : $"  Step #{idx + 1}: {Markup.Escape(enabledOps[idx].DisplayTitle)} ({Markup.Escape(enabledOps[idx].Summary)})")
-                    .AddChoices(navChoices));
+            int picked = InteractiveMenu.Prompt(
+                $"  [{theme.CategoryLabelHex}]Inspect Step Tab[/]",
+                tabOptions,
+                theme,
+                backValue: -1,
+                allowEscape: true,
+                pageSize: 6);
 
             if (picked == -1) return;
             inspectedStepIndex = picked;
@@ -437,39 +487,49 @@ public static class PipelineConfigScreen
 
     private static void ManagePresets(RenamePipelineConfig config, AppTheme theme)
     {
-        int action = AnsiConsole.Prompt(
-            new SelectionPrompt<int>()
-                .Title($"  [{theme.CategoryLabelHex}]Pipeline Presets[/]")
-                .HighlightStyle(new Style(
-                    foreground: theme.ToColor(theme.BackgroundHex),
-                    background: theme.ToColor(theme.PrimaryHex)))
-                .UseConverter(a => a switch
-                {
-                    1 => "  Load Saved Preset",
-                    2 => "  Save Current Operation Stack as Preset",
-                    3 => "  Delete a Preset",
-                    4 => "  Back",
-                    _ => string.Empty
-                })
-                .AddChoices(1, 2, 3, 4));
+        AnsiConsole.Clear();
+        AnsiConsole.WriteLine();
+
+        var presetMenu = new List<MenuOption<int>>
+        {
+            new(1, "Load Saved Preset", '1'),
+            new(2, "Save Current Operation Stack as Preset", '2'),
+            new(3, "Delete a Preset", '3'),
+            new(0, "Back (Esc)", '0', IsBackOption: true)
+        };
+
+        int action = InteractiveMenu.Prompt(
+            $"  [{theme.CategoryLabelHex}]Pipeline Presets[/]",
+            presetMenu,
+            theme,
+            backValue: 0,
+            allowEscape: true);
 
         if (action == 1)
         {
             var presets = PresetManager.LoadAllPresets();
             if (presets.Count == 0) return;
 
-            var chosen = AnsiConsole.Prompt(
-                new SelectionPrompt<PipelinePreset>()
-                    .Title($"  [{theme.CategoryLabelHex}]Select Preset to Load[/]")
-                    .UseConverter(p => $"  {Markup.Escape(p.Name)} [{theme.MutedHex}]({p.Config.Operations.Count} steps)[/]")
-                    .AddChoices(presets));
+            AnsiConsole.Clear();
+            AnsiConsole.WriteLine();
 
-            config.CopyFrom(chosen.Config);
-            AnsiConsole.MarkupLine($"  [{theme.SuccessHex}]✓ Loaded preset '{Markup.Escape(chosen.Name)}'.[/]");
-            ThemeRenderer.Pause(theme);
+            var choices = presets
+                .Select((p, i) => new MenuOption<int>(i, $"{Markup.Escape(p.Name)} [{theme.MutedHex}]({p.Config.Operations.Count} steps)[/]", i < 9 ? (char)('1' + i) : null))
+                .Append(new MenuOption<int>(-1, "Cancel (Esc)", '0', IsBackOption: true))
+                .ToList();
+
+            int idx = InteractiveMenu.Prompt($"  [{theme.CategoryLabelHex}]Select Preset to Load[/]", choices, theme, backValue: -1, allowEscape: true);
+            if (idx >= 0)
+            {
+                config.CopyFrom(presets[idx].Config);
+                AnsiConsole.MarkupLine($"\n  [{theme.SuccessHex}]✓ Loaded preset '{Markup.Escape(presets[idx].Name)}'.[/]");
+                ThemeRenderer.Pause(theme);
+            }
         }
         else if (action == 2)
         {
+            AnsiConsole.Clear();
+            AnsiConsole.WriteLine();
             string name = AnsiConsole.Prompt(
                 new TextPrompt<string>($"  [{theme.CategoryLabelHex}]Preset Name[/] [{theme.MutedHex}]>[/]").AllowEmpty());
 
@@ -485,15 +545,21 @@ public static class PipelineConfigScreen
             var presets = PresetManager.LoadAllPresets();
             if (presets.Count == 0) return;
 
-            var toDelete = AnsiConsole.Prompt(
-                new SelectionPrompt<PipelinePreset>()
-                    .Title($"  [{theme.WarningHex}]Select Preset to Delete[/]")
-                    .UseConverter(p => $"  {Markup.Escape(p.Name)}")
-                    .AddChoices(presets));
+            AnsiConsole.Clear();
+            AnsiConsole.WriteLine();
 
-            PresetManager.DeletePreset(toDelete);
-            AnsiConsole.MarkupLine($"  [{theme.SuccessHex}]✓ Deleted preset '{Markup.Escape(toDelete.Name)}'.[/]");
-            ThemeRenderer.Pause(theme);
+            var choices = presets
+                .Select((p, i) => new MenuOption<int>(i, Markup.Escape(p.Name), i < 9 ? (char)('1' + i) : null))
+                .Append(new MenuOption<int>(-1, "Cancel (Esc)", '0', IsBackOption: true))
+                .ToList();
+
+            int idx = InteractiveMenu.Prompt($"  [{theme.WarningHex}]Select Preset to Delete[/]", choices, theme, backValue: -1, allowEscape: true);
+            if (idx >= 0)
+            {
+                PresetManager.DeletePreset(presets[idx]);
+                AnsiConsole.MarkupLine($"\n  [{theme.SuccessHex}]✓ Deleted preset '{Markup.Escape(presets[idx].Name)}'.[/]");
+                ThemeRenderer.Pause(theme);
+            }
         }
     }
 }
