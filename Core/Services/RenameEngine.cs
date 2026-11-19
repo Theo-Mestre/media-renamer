@@ -6,24 +6,10 @@ namespace MediaRenamer.Core.Services;
 
 public sealed class RenameEngine
 {
-    private readonly IReadOnlyList<IRenameStep> _pipelineSteps;
     private readonly Stack<IReadOnlyList<RenameRecord>> _undoHistory = new();
 
     public bool CanUndo => _undoHistory.Count > 0;
     public int LastBatchCount => _undoHistory.TryPeek(out var last) ? last.Count : 0;
-
-    public RenameEngine()
-    {
-        _pipelineSteps =
-        [
-            new StripLegacyNumberStep(),
-            new SplitNameArtistStep(),
-            new SetBaseIdentityStep(),
-            new FindReplaceStep(),
-            new AffixStep(),
-            new CaseTransformStep()
-        ];
-    }
 
     public List<RenameOperationPreview> BuildPreview(
         IReadOnlyList<MediaFileItem> allWorkspaceFiles,
@@ -31,40 +17,48 @@ public sealed class RenameEngine
         RenamePipelineConfig config)
     {
         var selectedPaths = selectedFiles.Select(f => f.FullPath).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var enabledOps = config.Operations.Where(op => op.IsEnabled).ToList();
 
-        // 1. Run text transformation pipeline on selected files
-        var transformedMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        // 1. Run dynamic operation stack on selected files & capture per-step snapshots
+        var transformedMap = new Dictionary<string, (string FinalStem, List<StepPreviewSnapshot> Snapshots)>(StringComparer.OrdinalIgnoreCase);
+
         foreach (var file in selectedFiles)
         {
-            var ctx = new RenameContext { Config = config, PreservedPadding = config.PaddingDigits };
+            var ctx = new RenameContext { PreservedPadding = config.PaddingDigits };
+            var snapshots = new List<StepPreviewSnapshot>(enabledOps.Count);
             string current = file.BaseName;
 
-            foreach (var step in _pipelineSteps)
+            foreach (var op in enabledOps)
             {
-                current = step.Execute(current, ctx);
+                current = op.Apply(current, ctx);
+                snapshots.Add(new StepPreviewSnapshot(op.Id, op.DisplayTitle, current));
             }
 
-            transformedMap[file.FullPath] = current;
+            // Re-attach preserved index if AutoCount/CompactGaps/LinkedOverride are not active
+            if (!config.AutoCount && !config.CompactGaps && !config.LinkedNumberOverride.HasValue && ctx.PreservedIndex.HasValue)
+            {
+                current = $"{current} - {ctx.PreservedIndex.Value.ToString($"D{ctx.PreservedPadding}")}";
+            }
+
+            transformedMap[file.FullPath] = (current, snapshots);
         }
 
-        // 2. Collect target scopes from selected files (used by LinkedNumberOverride and CompactGaps)
+        // 2. Collect target scopes from selected files
         var targetScopes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var file in selectedFiles)
         {
-            var parsed = MediaNameParser.Parse(transformedMap[file.FullPath] + file.Extension);
+            var parsed = MediaNameParser.Parse(transformedMap[file.FullPath].FinalStem + file.Extension);
             targetScopes.Add(parsed.GetScopeKey(config.Scope));
         }
 
         bool pullEntireScope = config.LinkedNumberOverride.HasValue || config.CompactGaps;
 
-        // 3. Initialize cross-folder counter:
-        //    - If CompactGaps is ON, start every affected scope at 0 so numbering compacts from 001
-        //    - Otherwise, seed max existing index from unselected workspace files
+        // 3. Initialize extension-agnostic cross-folder counter
         var counter = config.CompactGaps
             ? new CrossFolderCounter([], selectedPaths, config.Scope)
             : new CrossFolderCounter(allWorkspaceFiles, selectedPaths, config.Scope);
 
-        // 4. Gather files to evaluate and sort cleanly by existing index when compacting gaps
+        // 4. Gather files to evaluate
         var filesToEvaluate = allWorkspaceFiles
             .Where(f => selectedPaths.Contains(f.FullPath) ||
                         (pullEntireScope && targetScopes.Contains(f.Parsed.GetScopeKey(config.Scope))))
@@ -79,7 +73,11 @@ public sealed class RenameEngine
         foreach (var file in filesToEvaluate)
         {
             bool isDirectlySelected = selectedPaths.Contains(file.FullPath);
-            string workingBase = isDirectlySelected ? transformedMap[file.FullPath] : file.BaseName;
+            string workingBase = isDirectlySelected ? transformedMap[file.FullPath].FinalStem : file.BaseName;
+            IReadOnlyList<StepPreviewSnapshot> stepHistory = isDirectlySelected
+                ? transformedMap[file.FullPath].Snapshots
+                : [];
+
             var parsed = MediaNameParser.Parse(workingBase + file.Extension);
             string scopeKey = parsed.GetScopeKey(config.Scope);
 
@@ -112,7 +110,7 @@ public sealed class RenameEngine
                                 (File.Exists(finalFullPath) || plannedTargetPaths.Contains(finalFullPath));
 
             plannedTargetPaths.Add(finalFullPath);
-            results.Add(new RenameOperationPreview(file, finalFileName, finalFullPath, hasChanged, hasCollision));
+            results.Add(new RenameOperationPreview(file, stepHistory, finalFileName, finalFullPath, hasChanged, hasCollision));
         }
 
         return results;
@@ -152,7 +150,6 @@ public sealed class RenameEngine
         var applied = new List<RenameRecord>();
         var tempMoves = new List<(string TempPath, RenameRecord Record)>();
 
-        // Phase 1: Stage to temporary filenames to prevent case-only or swap collisions
         foreach (var record in moves)
         {
             try
@@ -175,7 +172,6 @@ public sealed class RenameEngine
             }
         }
 
-        // Phase 2: Commit final filenames
         foreach (var (tempPath, record) in tempMoves)
         {
             try

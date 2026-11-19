@@ -83,18 +83,31 @@ public static class ThemeRenderer
             ? "..." + session.RootDirectory[^(maxPathWidth - 3)..]
             : session.RootDirectory;
 
+        int unformattedCount = session.AllFiles.Count(f => !f.Parsed.IsConforming);
+        string auditBadge = unformattedCount > 0
+            ? $"  [{theme.WarningHex}]({unformattedCount} unformatted)[/]"
+            : session.AllFiles.Count > 0
+                ? $"  [{theme.SuccessHex}](100% clean)[/]"
+                : string.Empty;
+
+        var activeOps = cfg.Operations.Where(o => o.IsEnabled).ToList();
+        string rawOpsChain = string.Join(" → ", activeOps.Select(o => o.DisplayTitle));
+        int maxChainWidth = Math.Max(16, targetWidth - 34);
+
+        string opsSummary = activeOps.Count == 0
+            ? $"[{theme.MutedHex}]No active operations[/]"
+            : rawOpsChain.Length <= maxChainWidth
+                ? $"[{theme.PrimaryHex}]{activeOps.Count} active[/] [{theme.MutedHex}]({Markup.Escape(rawOpsChain)})[/]"
+                : $"[{theme.PrimaryHex}]{activeOps.Count} active operation(s) in stack[/]";
+
         string scopeLabel = cfg.Scope == CountScope.NameAndArtist ? "Name + Artist" : "Name Only";
         string autoCountText = cfg.AutoCount
             ? $"[{theme.SuccessHex}]✓ Enabled[/] [{theme.MutedHex}]({scopeLabel})[/]"
             : $"[{theme.MutedHex}]Disabled[/]";
 
-        string findText = string.IsNullOrEmpty(cfg.FindText)
-            ? $"[{theme.MutedHex}]None[/]"
-            : $"[{theme.TextHex}]'{Markup.Escape(cfg.FindText)}'[/] [{theme.MutedHex}]→[/] [{theme.SecondaryHex}]'{Markup.Escape(cfg.ReplaceText)}'[/]";
-
-        string affixesText = (string.IsNullOrEmpty(cfg.Prefix) && string.IsNullOrEmpty(cfg.Suffix))
-            ? $"[{theme.MutedHex}]None[/]"
-            : $"[{theme.MutedHex}]Pre:[/] [{theme.TextHex}]{Markup.Escape(cfg.Prefix ?? "-")}[/]  [{theme.MutedHex}]Suf:[/] [{theme.TextHex}]{Markup.Escape(cfg.Suffix ?? "-")}[/]";
+        string compactText = cfg.CompactGaps
+            ? $"[{theme.WarningHex}]ON[/]"
+            : $"[{theme.MutedHex}]Off[/]";
 
         string linkedText = cfg.LinkedNumberOverride.HasValue
             ? $"[{theme.WarningHex}]Set {cfg.LinkedNumberOverride.Value.ToString($"D{cfg.PaddingDigits}")}[/]"
@@ -104,19 +117,25 @@ public static class ThemeRenderer
             ? $"[{theme.SuccessHex}]{session.Engine.LastBatchCount} file(s)[/]"
             : $"[{theme.MutedHex}]Empty[/]";
 
-        int unformattedCount = session.AllFiles.Count(f => !f.Parsed.IsConforming);
-        string auditBadge = unformattedCount > 0
-            ? $"  [{theme.WarningHex}]({unformattedCount} unformatted)[/]"
-            : session.AllFiles.Count > 0
-                ? $"  [{theme.SuccessHex}](100% clean)[/]"
-                : string.Empty;
+        layout.AddRow(
+            $"[{theme.CategoryLabelHex}]Workspace[/]",
+            $"[{theme.PrimaryHex}]{Markup.Escape(displayRoot)}[/]");
 
-        layout.AddRow($"[{theme.CategoryLabelHex}]Workspace[/]", $"[{theme.PrimaryHex}]{Markup.Escape(displayRoot)}[/]");
-        layout.AddRow($"[{theme.CategoryLabelHex}]Selection[/]",$"[{theme.SuccessHex}]✓ {session.SelectedFiles.Count} selected[/] [{theme.MutedHex}]/ {session.AllFiles.Count} total[/]{auditBadge}");
-        layout.AddRow($"[{theme.CategoryLabelHex}]Replace[/]", findText);
-        layout.AddRow($"[{theme.CategoryLabelHex}]Affixes[/]", affixesText);
-        layout.AddRow($"[{theme.CategoryLabelHex}]Formatting[/]", $"[{theme.SecondaryHex}]{cfg.CaseMode}[/]  [{theme.MutedHex}]Auto-Count:[/] {autoCountText}");
-        layout.AddRow($"[{theme.CategoryLabelHex}]Group Sync[/]", $"{linkedText}  [{theme.MutedHex}]Undo:[/] {undoText}");
+        layout.AddRow(
+            $"[{theme.CategoryLabelHex}]Selection[/]",
+            $"[{theme.SuccessHex}]✓ {session.SelectedFiles.Count} selected[/] [{theme.MutedHex}]/ {session.AllFiles.Count} total[/]{auditBadge}");
+
+        layout.AddRow(
+            $"[{theme.CategoryLabelHex}]Operations[/]",
+            opsSummary);
+
+        layout.AddRow(
+            $"[{theme.CategoryLabelHex}]Numbering[/]",
+            $"Auto-Count: {autoCountText}  [{theme.MutedHex}]Compact:[/] {compactText}");
+
+        layout.AddRow(
+            $"[{theme.CategoryLabelHex}]Group Sync[/]",
+            $"{linkedText}  [{theme.MutedHex}]Undo:[/] {undoText}");
 
         return new Panel(layout)
         {

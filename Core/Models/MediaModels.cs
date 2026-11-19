@@ -4,8 +4,8 @@ namespace MediaRenamer.Core.Models;
 
 public enum CountScope
 {
-    NameAndArtist, // Default: "Name - John Doe"
-    NameOnly       // "Name" regardless of artist
+    NameAndArtist,
+    NameOnly
 }
 
 public enum CaseTransform
@@ -81,8 +81,15 @@ public sealed class MediaFileItem
     }
 }
 
+public sealed record StepPreviewSnapshot(
+    string OperationId,
+    string OperationTitle,
+    string ResultingBaseName
+);
+
 public sealed record RenameOperationPreview(
     MediaFileItem Source,
+    IReadOnlyList<StepPreviewSnapshot> StepHistory,
     string ProposedFileName,
     string ProposedFullPath,
     bool HasChanged,

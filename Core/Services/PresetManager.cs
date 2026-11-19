@@ -1,5 +1,6 @@
 ﻿using System.Text.Json;
 using MediaRenamer.Core.Models;
+using MediaRenamer.Core.Pipeline;
 
 namespace MediaRenamer.Core.Services;
 
@@ -19,9 +20,13 @@ public static class PresetManager
         {
             var cleanup = new RenamePipelineConfig
             {
-                StripLegacyNumbers = true,
-                SplitNameAfterWords = 1,
-                CaseMode = CaseTransform.TitleCase,
+                Operations =
+                [
+                    new StripLegacyNumberOperation(),
+                    new ReplaceStringOperation { SearchFor = "_", ReplaceWith = " " },
+                    new SplitNameArtistOperation { SplitAfterWords = 1 },
+                    new CaseTransformOperation { CaseMode = CaseTransform.TitleCase }
+                ],
                 AutoCount = true,
                 CompactGaps = false,
                 Scope = CountScope.NameAndArtist,
@@ -35,8 +40,11 @@ public static class PresetManager
         {
             var fav = new RenamePipelineConfig
             {
-                Prefix = "! ",
-                StripLegacyNumbers = true,
+                Operations =
+                [
+                    new StripLegacyNumberOperation(),
+                    new AddAffixOperation { Prefix = "! " }
+                ],
                 AutoCount = false
             };
             File.WriteAllText(favPath, JsonSerializer.Serialize(fav, JsonOptions));
@@ -63,7 +71,7 @@ public static class PresetManager
             }
             catch
             {
-                // Skip malformed preset files gracefully
+                // Skip malformed preset files
             }
         }
 
