@@ -45,7 +45,7 @@ Every rule executes in sequence, records an intermediate snapshot after each ste
 
 The codebase follows Clean Architecture principles with strict separation between domain logic, file-system I/O, and terminal rendering.
 
-[![Execution Sequence Diagram](docs/diagram.svg)](https://theo-mestre.github.io/MediaRenamer/diagram.html)
+[![Execution Sequence Diagram](docs/diagram.svg)](https://theo-mestre.github.io/media-renamer/diagram.html)
 
 *Click the diagram above to open the interactive pan & zoom viewer.*
 
