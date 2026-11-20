@@ -1,6 +1,6 @@
 # MediaRenamer
 
-![.NET](https://img.shields.io/badge/.NET-8.0-512BD4?logo=dotnet) ![Spectre.Console](https://img.shields.io/badge/TUI-Spectre.Console-blueviolet) ![License](https://img.shields.io/github/license/Theo-Mestre/MediaRenamer)
+![.NET](https://img.shields.io/badge/.NET-8.0-512BD4?logo=dotnet) ![Spectre.Console](https://img.shields.io/badge/TUI-Spectre.Console-blueviolet) ![License](https://img.shields.io/badge/License-MIT-green)
 
 A terminal-based batch file renamer built with C# .NET 8 and `Spectre.Console`. It started out as a quick utility to help me organize and rename my personal photo, screenshot and fan-art/reference library, before growing into a structured small project with composable pipelines, cross-folder sequence numbering, and atomic file operations.
 
