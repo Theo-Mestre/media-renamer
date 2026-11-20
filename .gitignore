@@ -56,3 +56,8 @@ CodeCoverage/
 TestResult.xml
 nunit-*.xml
 .vs
+
+# MediaRenamer runtime artifacts
+session.json
+presets/
+themes/
