@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="MediaRenamer/MediaRenamer.csproj"/>
+  <Project Path="MediaRenamer.Tests/MediaRenamer.Tests.csproj"/>
+</Solution>
