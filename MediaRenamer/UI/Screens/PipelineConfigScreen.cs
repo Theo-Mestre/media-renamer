@@ -124,7 +124,11 @@ public static class PipelineConfigScreen
 
         if (config.Operations.Count == 0)
         {
-            stackTable.AddRow("-", $"[{theme.MutedHex}]No operations in stack[/]", $"[{theme.MutedHex}]Press [1] to add an operation[/]", "-");
+            stackTable.AddRow(
+                "-",
+                $"[{theme.MutedHex}]No operations in stack[/]",
+                $"[{theme.MutedHex}]Press [[1]] to add an operation[/]",
+                "-");
         }
         else
         {
