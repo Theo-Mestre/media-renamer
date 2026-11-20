@@ -69,14 +69,6 @@ public static class FileSelectionScreen
             return;
         }
 
-        if (AnsiConsole.Confirm(
-            $"  [{theme.TextHex}]Select all[/] [{theme.HeaderAccentHex}]{filtered.Count}[/] [{theme.TextHex}]matching file(s) immediately?[/]",
-            defaultValue: false))
-        {
-            session.SelectedFiles = filtered;
-            return;
-        }
-
         var selectedSet = session.SelectedFiles.Select(f => f.FullPath).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var prompt = new MultiSelectionPrompt<SelectableEntry>()

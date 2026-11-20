@@ -9,7 +9,7 @@ public sealed class RenamePipelineConfig
         new StripLegacyNumberOperation()
     ];
 
-    public bool AutoCount { get; set; } = false;
+    public bool AutoCount { get; set; } = true;
     public bool CompactGaps { get; set; } = false;
     public CountScope Scope { get; set; } = CountScope.NameAndArtist;
     public int PaddingDigits { get; set; } = 3;
