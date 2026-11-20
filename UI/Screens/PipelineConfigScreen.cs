@@ -398,14 +398,22 @@ public static class PipelineConfigScreen
 
     private static ReplaceStringOperation PromptReplaceOperation(ReplaceStringOperation op, AppTheme theme)
     {
-        op.SearchFor = AnsiConsole.Prompt(
-            new TextPrompt<string>($"  [{theme.CategoryLabelHex}]Search for String / Pattern[/] [{theme.MutedHex}]>[/]")
-                .DefaultValue(op.SearchFor)
+        string currentSearchHint = string.IsNullOrEmpty(op.SearchFor) ? string.Empty : $" [{theme.MutedHex}](current: '{Markup.Escape(op.SearchFor)}')[/]";
+        string inputSearch = AnsiConsole.Prompt(
+            new TextPrompt<string>($"  [{theme.CategoryLabelHex}]Search for String / Pattern[/]{currentSearchHint} [{theme.MutedHex}]>[/]")
                 .AllowEmpty());
 
+        if (!string.IsNullOrEmpty(inputSearch))
+            op.SearchFor = inputSearch;
+
+        string currentReplaceDisplay = op.ReplaceWith == " "
+            ? "' ' (single space)"
+            : string.IsNullOrEmpty(op.ReplaceWith)
+                ? "empty"
+                : $"'{Markup.Escape(op.ReplaceWith)}'";
+
         op.ReplaceWith = AnsiConsole.Prompt(
-            new TextPrompt<string>($"  [{theme.CategoryLabelHex}]Replace with[/] [{theme.MutedHex}](Enter for empty/delete) >[/]")
-                .DefaultValue(op.ReplaceWith)
+            new TextPrompt<string>($"  [{theme.CategoryLabelHex}]Replace with[/] [{theme.MutedHex}](current: {currentReplaceDisplay}; Space+Enter for whitespace, Enter for empty) >[/]")
                 .AllowEmpty());
 
         op.UseRegex = AnsiConsole.Confirm($"  [{theme.TextHex}]Use Regular Expression?[/]", defaultValue: op.UseRegex);

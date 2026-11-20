@@ -54,7 +54,11 @@ public sealed record ParsedMediaName(
         CountScope.NameAndArtist => string.IsNullOrWhiteSpace(ArtistPart)
             ? NamePart.Trim().ToLowerInvariant()
             : $"{NamePart.Trim().ToLowerInvariant()}|{ArtistPart.Trim().ToLowerInvariant()}",
-        CountScope.NameOnly => NamePart.Trim().ToLowerInvariant(),
+
+        CountScope.NameOnly => IdentityPrefix.Contains(" - ")
+            ? NamePart.Trim().ToLowerInvariant()
+            : IdentityPrefix.Trim().ToLowerInvariant(),
+
         _ => NamePart.Trim().ToLowerInvariant()
     };
 }
